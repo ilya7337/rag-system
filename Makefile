@@ -1,4 +1,4 @@
-.PHONY: build up down logs shell install
+.PHONY: build up down logs shell install run dev create-admin
 
 build:
 	docker-compose build
@@ -23,4 +23,14 @@ run:
 
 dev:
 	docker-compose up --build
+
+create-admin:
+ifdef login
+ifndef password
+	$(error password is undefined. Use: make create-admin login=LOGIN password=PASSWORD)
+endif
+	@cd src && python create_admin.py $(login) $(password)
+else
+	$(error login is undefined. Use: make create-admin login=LOGIN password=PASSWORD)
+endif
 
