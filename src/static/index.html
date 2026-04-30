@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>База знаний — AI помощник</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header__brand">База знаний</div>
+            <div class="header__auth" id="auth-section">
+                <button class="btn" id="btn-login">Вход</button>
+                <button class="btn btn--primary" id="btn-register">Регистрация</button>
+            </div>
+            <div class="header__auth header__auth--hidden" id="user-section">
+                <span id="user-name"></span>
+                <button class="btn" id="btn-logout">Выйти</button>
+            </div>
+        </header>
+
+        <main class="main">
+            <section class="welcome">
+                <h1>Добро пожаловать в Базу знаний</h1>
+                <p>Исследуйте темы и задавайте вопросы AI-ассистенту на основе загруженных документов.</p>
+            </section>
+
+            <section class="topics">
+                <h2>Темы</h2>
+                <div class="topics__grid" id="topics-grid">
+                    <div class="topics__empty">Загрузка тем…</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+        <div class="chat-panel__toggle" id="chat-toggle" title="Чат-бот">💬</div>
+        <div class="chat-panel__body" id="chat-body">
+            <div class="chat-panel__header">
+                <span>AI помощник</span>
+                <div>
+                    <button class="btn btn--small" id="btn-new-chat" title="Новый чат">+</button>
+                    <button class="btn btn--small" id="btn-history-toggle" title="История">☰</button>
+                    <button class="btn btn--small" id="btn-close-chat">✕</button>
+                </div>
+            </div>
+            <div class="chat-panel__content">
+                <div class="chat-history" id="chat-history-sidebar">
+                    <div class="chat-history__title">История</div>
+                    <div id="history-list">
+                        <div class="chat-history__empty">Войдите, чтобы сохранять историю</div>
+                    </div>
+                </div>
+                <div class="chat-messages" id="chat-messages"></div>
+            </div>
+            <form class="chat-input" id="chat-form" autocomplete="off">
+                <input type="text" id="chat-input" placeholder="Введите запрос…">
+                <button type="submit">➤</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Feedback Button -->
+    <button class="feedback-btn" id="feedback-btn" title="Обратная связь">✉️</button>
+
+    <!-- Auth Modal -->
+    <div class="modal modal--hidden" id="auth-modal">
+        <div class="modal__backdrop"></div>
+        <div class="modal__content">
+            <h3 id="auth-title">Вход</h3>
+            <input type="text" id="auth-login" placeholder="Логин">
+            <input type="password" id="auth-password" placeholder="Пароль">
+            <div class="modal__error" id="auth-error"></div>
+            <div class="modal__actions">
+                <button class="btn" id="auth-cancel">Отмена</button>
+                <button class="btn btn--primary" id="auth-submit">Войти</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div class="modal modal--hidden" id="feedback-modal">
+        <div class="modal__backdrop"></div>
+        <div class="modal__content">
+            <h3>Обратная связь</h3>
+            <textarea id="feedback-text" rows="4" placeholder="Ваш комментарий…"></textarea>
+            <div class="modal__actions">
+                <button class="btn" id="feedback-cancel">Отмена</button>
+                <button class="btn btn--primary" id="feedback-send">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

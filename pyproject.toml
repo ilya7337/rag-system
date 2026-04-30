@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "knowledge-base"
+version = "1.0.0"
+description = "Knowledge Base with AI Chatbot"
+authors = ["batunovandrey <ondrushenka@yandex.ru>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.32.0"}
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.36"}
+asyncpg = "^0.30.0"
+pgvector = "^0.3.6"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["argon2"], version = "^1.7.4"}
+argon2-cffi = "^23.1.0"
+python-multipart = "^0.0.17"
+jinja2 = "^3.1.4"
+aiofiles = "^24.1.0"
+openai = "^1.54.0"
+pypdf2 = "^3.0.1"
+python-dotenv = "^1.0.1"
+pydantic = "^2.9.0"
+pydantic-settings = "^2.6.0"
+
+[tool.black]
+line-length = 120
+skip-string-normalization = true
+
+[tool.flake8]
+ignore = "E203, E266, E501, E999, W503, F401, F403"
+max-line-length = 120
+max-complexity = 9
+select = "B, C, E, F, W, T4, B9"
+exclude = ".git, .venv"
+
+[tool.isort]
+combine_as_imports = true
+default_section = "THIRDPARTY"
+include_trailing_comma = true
+line_length = 120
+multi_line_output = 3
+not_skip = "__init__.py"
+skip_glob = ".venv"
+
+[build-system]
+requires = ["poetry-core>=1.1.13"]
+build-backend = "poetry.core.masonry.api"
+

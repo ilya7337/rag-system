@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  db:
+    container_name: knowledge-base-db
+    build: ./docker/postgres
+    image: ankane/pgvector:latest
+    restart: always
+    volumes:
+      - db_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_db}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-knowledge_user} -d ${POSTGRES_DB:-knowledge_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    container_name: knowledge-base-app
+    build:
+      context: .
+      dockerfile: ./docker/app/Dockerfile
+    restart: always
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./src:/src
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-knowledge_user}:${POSTGRES_PASSWORD:-knowledge_pass}@db:5432/${POSTGRES_DB:-knowledge_db}
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
+      DEBUG: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  db_data:
+
