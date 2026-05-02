@@ -60,7 +60,7 @@ DEBUG=true
 4. `make create-admin login=admin password=your-password` — создать администратора
 5. После успешного запуска перейти на http://localhost:8000/. 
    Административная панель: http://localhost:8000/admin/. 
-   Сваггер: http://localhost:8000/api/docs.
+   Сваггер: http://localhost:8000/docs.
 
 ---
 
