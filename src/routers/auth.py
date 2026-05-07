@@ -1,36 +1,32 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import create_access_token, get_current_user, get_password_hash, verify_password
+from dao.dependencies import get_user_dao
+from schemas import Token, UserLogin, UserOut, UserRegister
 from database import get_db
 from models import User
-from schemas import Token, UserLogin, UserOut, UserRegister
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.login == data.login))
-    existing = result.scalar_one_or_none()
+async def register(data: UserRegister, db: AsyncSession = Depends(get_db), user_dao = Depends(get_user_dao)):
+    existing = await user_dao.get_by_login(db, data.login)
     if existing:
         raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
 
-    user = User(
-        login=data.login,
-        hashed_password=get_password_hash(data.password),
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    user_data = {
+        "login": data.login,
+        "hashed_password": get_password_hash(data.password),
+    }
+    user = await user_dao.create(db, user_data)
     return user
 
 
 @router.post("/login", response_model=Token)
-async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.login == data.login))
-    user = result.scalar_one_or_none()
+async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db), user_dao = Depends(get_user_dao)):
+    user = await user_dao.get_by_login(db, data.login)
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 

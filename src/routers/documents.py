@@ -2,13 +2,13 @@ import uuid
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import require_admin
+from dao.dependencies import get_document_dao, get_topic_dao
 from database import get_db
 from models import Document, Topic, User
-from schemas import DocumentCreate, DocumentDetail, DocumentOut
+from schemas import DocumentCreate, DocumentDetail, DocumentOut, DocumentUpdate
 from services.llm_service import LLMService
 from services.pdf_service import PDFService
 
@@ -19,20 +19,18 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 async def list_documents_by_topic(
     topic_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
 ):
-    result = await db.execute(
-        select(Document).where(Document.topic_id == topic_id).order_by(Document.created_at.desc())
-    )
-    return result.scalars().all()
+    return await document_dao.get_by_topic(db, topic_id)
 
 
 @router.get("/{doc_id}", response_model=DocumentDetail)
 async def get_document(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
 ):
-    result = await db.execute(select(Document).where(Document.id == doc_id))
-    doc = result.scalar_one_or_none()
+    doc = await document_dao.get(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
     return doc
@@ -45,11 +43,12 @@ async def upload_document(
     description: Optional[str] = Form(None),
     pdf_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    topic_dao = Depends(get_topic_dao),
+    document_dao = Depends(get_document_dao),
     admin: User = Depends(require_admin),
 ):
     # Verify topic exists
-    result = await db.execute(select(Topic).where(Topic.id == topic_id))
-    topic = result.scalar_one_or_none()
+    topic = await topic_dao.get(db, topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Тема не найдена")
 
@@ -67,17 +66,14 @@ async def upload_document(
     embedding = await llm_service.generate_embedding(pdf_text)
 
     # Create document
-    doc = Document(
-        id=uuid.uuid4(),
-        topic_id=topic_id,
-        title=title,
-        description=description,
-        pdf_text=pdf_text,
-        embedding=embedding,
-    )
-    db.add(doc)
-    await db.commit()
-    await db.refresh(doc)
+    doc_data = {
+        "topic_id": topic_id,
+        "title": title,
+        "description": description,
+        "pdf_text": pdf_text,
+        "embedding": embedding,
+    }
+    doc = await document_dao.create(db, doc_data)
     return doc
 
 
@@ -85,11 +81,12 @@ async def upload_document(
 async def create_document(
     data: DocumentCreate,
     db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
+    topic_dao = Depends(get_topic_dao),
     admin: User = Depends(require_admin),
 ):
     """Create document with raw text (for scraper compatibility)."""
-    result = await db.execute(select(Topic).where(Topic.id == data.topic_id))
-    topic = result.scalar_one_or_none()
+    topic = await topic_dao.get(db, data.topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Тема не найдена")
 
@@ -98,17 +95,14 @@ async def create_document(
         llm_service = LLMService()
         embedding = await llm_service.generate_embedding(data.pdf_text)
 
-    doc = Document(
-        id=uuid.uuid4(),
-        topic_id=data.topic_id,
-        title=data.title,
-        description=data.description,
-        pdf_text=data.pdf_text,
-        embedding=embedding,
-    )
-    db.add(doc)
-    await db.commit()
-    await db.refresh(doc)
+    doc_data = {
+        "topic_id": data.topic_id,
+        "title": data.title,
+        "description": data.description,
+        "pdf_text": data.pdf_text,
+        "embedding": embedding,
+    }
+    doc = await document_dao.create(db, doc_data)
     return doc
 
 
@@ -116,12 +110,34 @@ async def create_document(
 async def delete_document(
     doc_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
     admin: User = Depends(require_admin),
 ):
-    result = await db.execute(select(Document).where(Document.id == doc_id))
-    doc = result.scalar_one_or_none()
+    success = await document_dao.delete(db, doc_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    return None
+
+
+@router.patch("/{doc_id}", response_model=DocumentDetail)
+async def update_document(
+    doc_id: uuid.UUID,
+    data: DocumentUpdate,
+    db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
+    admin: User = Depends(require_admin),
+):
+    doc = await document_dao.update(db, doc_id, data.dict(exclude_unset=True))
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
-    await db.delete(doc)
-    await db.commit()
-    return None
+    return doc
+
+
+@router.get("", response_model=List[DocumentOut])
+async def list_documents(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    document_dao = Depends(get_document_dao),
+):
+    return await document_dao.get_all(db, skip=skip, limit=limit)

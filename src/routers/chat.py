@@ -2,14 +2,14 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import cast, Date, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_active_user
-from database import get_db
+from dao.dependencies import get_chat_session_dao, get_chat_message_dao, get_admin_log_dao
 from models import AdminLog, ChatMessage, ChatSession, User
 from schemas import ChatMessageCreate, ChatMessageOut, ChatSessionOut, RateMessage
 from services.llm_service import LLMService
+from database import get_db
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -19,40 +19,31 @@ async def send_message(
     data: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    session_dao = Depends(get_chat_session_dao),
+    message_dao = Depends(get_chat_message_dao),
+    admin_log_dao = Depends(get_admin_log_dao),
 ):
     # Determine or create session
     session_id = None
     if current_user:
-        today = date.today()
-        result = await db.execute(
-            select(ChatSession)
-            .where(
-                ChatSession.user_id == current_user.id,
-                cast(ChatSession.created_at, Date) == today,
-            )
-            .order_by(ChatSession.created_at.desc())
-        )
-        session = result.scalar_one_or_none()
+        session = await session_dao.get_today_session(db, current_user.id)
         if session:
             session_id = session.id
 
     if not session_id:
-        session = ChatSession(
-            id=uuid.uuid4(),
-            user_id=current_user.id if current_user else None,
-        )
-        db.add(session)
-        await db.flush()
+        session_data = {
+            "user_id": current_user.id if current_user else None,
+        }
+        session = await session_dao.create(db, session_data)
         session_id = session.id
 
     # Save user message
-    user_msg = ChatMessage(
-        id=uuid.uuid4(),
-        session_id=session_id,
-        role="user",
-        content=data.text,
-    )
-    db.add(user_msg)
+    user_msg_data = {
+        "session_id": session_id,
+        "role": "user",
+        "content": data.text,
+    }
+    await message_dao.create(db, user_msg_data)
 
     # Search documents and generate answer
     llm_service = LLMService()
@@ -60,26 +51,22 @@ async def send_message(
     answer = await llm_service.generate_answer(data.text, docs)
 
     # Save assistant message
-    assistant_msg = ChatMessage(
-        id=uuid.uuid4(),
-        session_id=session_id,
-        role="assistant",
-        content=answer,
-    )
-    db.add(assistant_msg)
+    assistant_msg_data = {
+        "session_id": session_id,
+        "role": "assistant",
+        "content": answer,
+    }
+    assistant_msg = await message_dao.create(db, assistant_msg_data)
 
     # Log for admin
-    log = AdminLog(
-        id=uuid.uuid4(),
-        session_id=session_id,
-        query=data.text,
-        response=answer,
-        is_anonymous=current_user is None,
-    )
-    db.add(log)
+    log_data = {
+        "session_id": session_id,
+        "query": data.text,
+        "response": answer,
+        "is_anonymous": current_user is None,
+    }
+    await admin_log_dao.create(db, log_data)
 
-    await db.commit()
-    await db.refresh(assistant_msg)
     return {"answer": answer, "message_id": assistant_msg.id, "documents_found": len(docs)}
 
 
@@ -87,33 +74,25 @@ async def send_message(
 async def get_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    session_dao = Depends(get_chat_session_dao),
+    message_dao = Depends(get_chat_message_dao),
 ):
     if not current_user:
         return []
 
-    result = await db.execute(
-        select(ChatSession)
-        .where(ChatSession.user_id == current_user.id)
-        .order_by(ChatSession.created_at.desc())
-    )
-    sessions = result.scalars().all()
+    sessions = await session_dao.get_user_sessions(db, current_user.id)
 
     # Populate first_message for each session
     output = []
     for session in sessions:
-        first_msg = None
-        msg_result = await db.execute(
-            select(ChatMessage)
-            .where(
-                ChatMessage.session_id == session.id,
-                ChatMessage.role == "user",
-            )
-            .order_by(ChatMessage.created_at.asc())
-            .limit(1)
+        first_msg_result = await message_dao.get_all(
+            db, 
+            session_id=session.id, 
+            role="user",
+            skip=0, 
+            limit=1
         )
-        first = msg_result.scalar_one_or_none()
-        if first:
-            first_msg = first.content[:60]
+        first_msg = first_msg_result[0].content[:60] if first_msg_result else None
 
         output.append(ChatSessionOut(
             id=session.id,
@@ -128,24 +107,16 @@ async def get_session_messages(
     session_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    session_dao = Depends(get_chat_session_dao),
+    message_dao = Depends(get_chat_message_dao),
 ):
     # Verify session belongs to user
-    result = await db.execute(
-        select(ChatSession).where(
-            ChatSession.id == session_id,
-            ChatSession.user_id == current_user.id,
-        )
-    )
-    session = result.scalar_one_or_none()
+    session = await session_dao.get_by(db, id=session_id, user_id=current_user.id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc())
-    )
-    return result.scalars().all()
+    messages = await message_dao.get_by_session(db, session_id)
+    return messages
 
 
 @router.post("/{message_id}/rate")
@@ -154,21 +125,14 @@ async def rate_message(
     data: RateMessage,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    message_dao = Depends(get_chat_message_dao),
+    session_dao = Depends(get_chat_session_dao),
 ):
-    result = await db.execute(
-        select(ChatMessage)
-        .join(ChatSession)
-        .where(
-            ChatMessage.id == message_id,
-            ChatSession.user_id == (current_user.id if current_user else None),
-        )
-    )
-    msg = result.scalar_one_or_none()
+    msg = await message_dao.get_user_message(db, message_id, current_user.id if current_user else None)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    msg.liked = data.liked
-    await db.commit()
+    await message_dao.update(db, message_id, {"liked": data.liked})
     return {"status": "ok"}
 
 
@@ -176,15 +140,13 @@ async def rate_message(
 async def new_chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    session_dao = Depends(get_chat_session_dao),
 ):
     if not current_user:
         return {"session_id": None}
 
-    session = ChatSession(
-        id=uuid.uuid4(),
-        user_id=current_user.id,
-    )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
+    session_data = {
+        "user_id": current_user.id,
+    }
+    session = await session_dao.create(db, session_data)
     return {"session_id": session.id}

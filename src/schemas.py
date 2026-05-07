@@ -36,10 +36,21 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+class UserUpdate(BaseModel):
+    login: Optional[str] = Field(None, min_length=3, max_length=255)
+    is_admin: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=8)
+
+
 # ============== Topic ==============
 class TopicCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: str = Field(..., min_length=1)
+
+
+class TopicUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, min_length=1)
 
 
 class TopicOut(BaseModel):
@@ -60,6 +71,12 @@ class TopicList(BaseModel):
 class DocumentCreate(BaseModel):
     topic_id: UUID
     title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    pdf_text: Optional[str] = None
+
+
+class DocumentUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     pdf_text: Optional[str] = None
 
@@ -142,4 +159,3 @@ class AdminLogOut(BaseModel):
 
 class AdminLogList(BaseModel):
     items: List[AdminLogOut]
-
