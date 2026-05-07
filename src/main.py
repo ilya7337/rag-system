@@ -54,6 +54,7 @@ app.include_router(feedback.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 
 # Static files
+app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
