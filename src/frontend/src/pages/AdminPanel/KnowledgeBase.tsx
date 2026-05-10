@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Card, CardContent, Typography, IconButton, Modal, TextField, Accordion, AccordionSummary, AccordionDetails, List, ListItem, ListItemText } from '@mui/material';
-import { Add, Edit, Delete, ExpandMore, Upload } from '@mui/icons-material';
+import { Box, Button, Card, CardContent, Typography, IconButton, Modal, TextField, Accordion, AccordionSummary, AccordionDetails, List, ListItem, ListItemText, CircularProgress, Alert } from '@mui/material';
+import { Add, Edit, Delete, ExpandMore, Upload, Language } from '@mui/icons-material';
 import * as api from '../../api/services';
 import type { Topic, Document } from '../../types';
 
@@ -11,10 +11,16 @@ export const KnowledgeBase: React.FC = () => {
     const [topicTitle, setTopicTitle] = useState('');
     const [topicDesc, setTopicDesc] = useState('');
     const [uploadOpen, setUploadOpen] = useState(false);
+    const [urlOpen, setUrlOpen] = useState(false);
     const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
     const [docTitle, setDocTitle] = useState('');
     const [docDesc, setDocDesc] = useState('');
     const [docFile, setDocFile] = useState<File | null>(null);
+    const [urlValue, setUrlValue] = useState('');
+    const [urlTitle, setUrlTitle] = useState('');
+    const [urlDesc, setUrlDesc] = useState('');
+    const [urlLoading, setUrlLoading] = useState(false);
+    const [urlError, setUrlError] = useState<string | null>(null);
     const [documents, setDocuments] = useState<Record<string, Document[]>>({});
 
     const loadTopics = async () => {
@@ -61,6 +67,29 @@ export const KnowledgeBase: React.FC = () => {
         setDocFile(null);
     };
 
+    const handleUrlImport = async () => {
+        if (!selectedTopic || !urlValue) return;
+        setUrlLoading(true);
+        setUrlError(null);
+        try {
+            await api.documents.fromUrl(selectedTopic.id, {
+                url: urlValue,
+                title: urlTitle || undefined,
+                description: urlDesc || undefined,
+            });
+            setUrlOpen(false);
+            setUrlValue('');
+            setUrlTitle('');
+            setUrlDesc('');
+            loadDocuments(selectedTopic.id);
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || 'Ошибка при загрузке страницы';
+            setUrlError(msg);
+        } finally {
+            setUrlLoading(false);
+        }
+    };
+
     const handleDeleteDoc = async (docId: string, topicId: string) => {
         if (window.confirm('Удалить документ?')) {
             await api.documents.delete(docId);
@@ -88,6 +117,9 @@ export const KnowledgeBase: React.FC = () => {
                                 </IconButton>
                                 <Button startIcon={<Upload />} onClick={() => { setSelectedTopic(topic); setUploadOpen(true); }}>
                                     Загрузить документ
+                                </Button>
+                                <Button startIcon={<Language />} onClick={() => { setSelectedTopic(topic); setUrlOpen(true); setUrlError(null); }}>
+                                    Добавить из URL
                                 </Button>
                             </Box>
                             <Accordion>
@@ -177,6 +209,46 @@ export const KnowledgeBase: React.FC = () => {
                         sx={{ mt: 2 }}
                     >
                         Загрузить
+                    </Button>
+                </Box>
+            </Modal>
+            <Modal open={urlOpen} onClose={() => !urlLoading && setUrlOpen(false)}>
+                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 450, bgcolor: 'background.paper', p: 4, borderRadius: 2 }}>
+                    <Typography variant="h6">Добавить документ из URL</Typography>
+                    <TextField
+                        fullWidth
+                        margin="normal"
+                        label="URL страницы"
+                        placeholder="https://example.com/article"
+                        value={urlValue}
+                        onChange={e => setUrlValue(e.target.value)}
+                        disabled={urlLoading}
+                    />
+                    <TextField
+                        fullWidth
+                        margin="normal"
+                        label="Название (необязательно — определится автоматически)"
+                        value={urlTitle}
+                        onChange={e => setUrlTitle(e.target.value)}
+                        disabled={urlLoading}
+                    />
+                    <TextField
+                        fullWidth
+                        margin="normal"
+                        label="Описание (необязательно)"
+                        value={urlDesc}
+                        onChange={e => setUrlDesc(e.target.value)}
+                        disabled={urlLoading}
+                    />
+                    {urlError && <Alert severity="error" sx={{ mt: 1 }}>{urlError}</Alert>}
+                    <Button
+                        variant="contained"
+                        onClick={handleUrlImport}
+                        disabled={!urlValue || urlLoading}
+                        startIcon={urlLoading ? <CircularProgress size={16} /> : <Language />}
+                        sx={{ mt: 2 }}
+                    >
+                        {urlLoading ? 'Загружаю...' : 'Загрузить'}
                     </Button>
                 </Box>
             </Modal>

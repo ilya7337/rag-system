@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV POETRY_VERSION=1.8.2
 
-RUN apt-get update && apt-get -y install --no-install-recommends gcc libpq-dev \
+RUN apt-get update && apt-get -y install --no-install-recommends gcc libpq-dev libxml2-dev libxslt-dev \
     && pip install --no-cache-dir "poetry==$POETRY_VERSION" \
     && poetry config virtualenvs.create false
 
