@@ -70,11 +70,12 @@ app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.get("/")
-async def root():
-    return FileResponse(Path("static/index.html"))
-
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    """Serve index.html for any non-API path so React Router handles client-side routes."""
+    return FileResponse(Path("static/index.html"))
