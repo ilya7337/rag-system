@@ -20,6 +20,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # Build frontend (Vite/React) into ./src/static
+  frontend-build:
+    container_name: knowledge-base-frontend-build
+    build:
+      context: .
+      dockerfile: ./docker/frontend/Dockerfile
+    volumes:
+      - ./src:/src
+    depends_on:
+      - db
+    command: sh -c "cp -R /frontend-out/. /src/static/"
+
   app:
     container_name: knowledge-base-app
     build:
@@ -41,7 +53,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      frontend-build:
+        condition: service_completed_successfully
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
 
 volumes:
   db_data:

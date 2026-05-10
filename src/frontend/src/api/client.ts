@@ -7,15 +7,16 @@ const apiClient: AxiosInstance = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+    // backend sets JWT in HttpOnly cookie; browser must send it back
+    withCredentials: true,
 });
 
+
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
+    // Backend uses HttpOnly cookie, so we don't read/attach Authorization header from localStorage.
     return config;
 });
+
 
 apiClient.interceptors.response.use(
     (response) => response,
