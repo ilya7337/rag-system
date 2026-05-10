@@ -34,6 +34,7 @@ export const useChatSession = (isAuthenticated: boolean, onHistoryUpdate: () => 
                 id: Date.now().toString() + '_assistant',
                 role: 'assistant',
                 content: response.data.answer,
+                sources: response.data.sources,
                 created_at: new Date().toISOString(),
             };
             setMessages(prev => [...prev, assistantMsg]);

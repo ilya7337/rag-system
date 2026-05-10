@@ -47,8 +47,16 @@ async def send_message(
 
     # Search documents and generate answer
     llm_service = LLMService()
-    docs = await llm_service.search_documents(db, data.text)
-    answer = await llm_service.generate_answer(data.text, docs)
+    results = await llm_service.search_documents(db, data.text)
+    answer = await llm_service.generate_answer(data.text, results)
+
+    # Deduplicate sources by document_id, preserving order
+    seen = set()
+    sources = []
+    for r in results:
+        if r.document_id not in seen:
+            seen.add(r.document_id)
+            sources.append({"document_id": r.document_id, "topic_id": r.topic_id, "title": r.title})
 
     # Save assistant message
     assistant_msg_data = {
@@ -67,7 +75,7 @@ async def send_message(
     }
     await admin_log_dao.create(db, log_data)
 
-    return {"answer": answer, "message_id": assistant_msg.id, "documents_found": len(docs)}
+    return {"answer": answer, "message_id": assistant_msg.id, "documents_found": len(results), "sources": sources}
 
 
 @router.get("/history", response_model=list[ChatSessionOut])

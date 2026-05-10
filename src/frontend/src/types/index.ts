@@ -20,12 +20,19 @@ export interface Document {
     pdf_text?: string;
 }
 
+export interface SourceDoc {
+    document_id: string;
+    topic_id: string;
+    title: string;
+}
+
 export interface ChatMessage {
     id: string;
     role: 'user' | 'assistant';
     content: string;
     liked?: boolean;
     created_at: string;
+    sources?: SourceDoc[];
 }
 
 export interface ChatSession {
@@ -38,6 +45,7 @@ export interface SendMessageResponse {
     answer: string;
     message_id: string;
     documents_found: number;
+    sources: SourceDoc[];
 }
 
 export interface Feedback {

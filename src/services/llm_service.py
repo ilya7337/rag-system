@@ -21,6 +21,7 @@ CHUNK_OVERLAP = 400
 @dataclass
 class SearchResult:
     document_id: str
+    topic_id: str
     title: str
     description: Optional[str]
     chunk_text: str
@@ -70,7 +71,7 @@ class LLMService:
         result = await db.execute(
             text(
                 """
-                SELECT d.id AS document_id, d.title, d.description,
+                SELECT d.id AS document_id, d.topic_id, d.title, d.description,
                        c.chunk_text,
                        c.embedding <=> :embedding AS distance
                 FROM document_chunks c
@@ -87,6 +88,7 @@ class LLMService:
         return [
             SearchResult(
                 document_id=str(row["document_id"]),
+                topic_id=str(row["topic_id"]),
                 title=row["title"],
                 description=row["description"],
                 chunk_text=row["chunk_text"],
