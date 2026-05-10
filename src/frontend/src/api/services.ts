@@ -34,6 +34,8 @@ export const documents = {
     delete: (docId: string) => apiClient.delete(`/documents/${docId}`),
     createFromText: (data: { topic_id: string; title: string; description?: string; pdf_text: string }) =>
         apiClient.post<Document>('/documents', data),
+    fromUrl: (topicId: string, data: { url: string; title?: string; description?: string }) =>
+        apiClient.post<Document>(`/documents/from-url/${topicId}`, data),
 };
 
 export const chat = {

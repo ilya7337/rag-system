@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional, List
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,10 @@ from auth import require_admin
 from dao.dependencies import get_document_dao, get_topic_dao
 from database import get_db
 from models import Document, Topic, User
-from schemas import DocumentCreate, DocumentDetail, DocumentOut, DocumentUpdate
+from schemas import DocumentCreate, DocumentDetail, DocumentFromUrl, DocumentOut, DocumentUpdate
 from services.llm_service import LLMService
 from services.pdf_service import PDFService
+from services.web_scraper_service import WebScraperService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -100,6 +102,47 @@ async def create_document(
         "title": data.title,
         "description": data.description,
         "pdf_text": data.pdf_text,
+        "embedding": embedding,
+    }
+    doc = await document_dao.create(db, doc_data)
+    return doc
+
+
+@router.post("/from-url/{topic_id}", response_model=DocumentDetail, status_code=status.HTTP_201_CREATED)
+async def create_document_from_url(
+    topic_id: uuid.UUID,
+    data: DocumentFromUrl,
+    db: AsyncSession = Depends(get_db),
+    topic_dao = Depends(get_topic_dao),
+    document_dao = Depends(get_document_dao),
+    admin: User = Depends(require_admin),
+):
+    topic = await topic_dao.get(db, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Тема не найдена")
+
+    scraper = WebScraperService()
+    try:
+        page_title, page_text = await scraper.fetch_and_extract(data.url)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"Не удалось загрузить страницу: HTTP {e.response.status_code}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка при обращении к URL: {e}")
+
+    if not page_text:
+        raise HTTPException(status_code=422, detail="Не удалось извлечь полезный текст из страницы")
+
+    title = data.title or page_title
+    description = data.description or data.url
+
+    llm_service = LLMService()
+    embedding = await llm_service.generate_embedding(page_text)
+
+    doc_data = {
+        "topic_id": topic_id,
+        "title": title,
+        "description": description,
+        "pdf_text": page_text,
         "embedding": embedding,
     }
     doc = await document_dao.create(db, doc_data)

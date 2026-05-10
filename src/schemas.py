@@ -75,6 +75,12 @@ class DocumentCreate(BaseModel):
     pdf_text: Optional[str] = None
 
 
+class DocumentFromUrl(BaseModel):
+    url: str = Field(..., min_length=10)
+    title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+
+
 class DocumentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
