@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import require_admin
-from dao.dependencies import get_document_dao, get_topic_dao
+from dao.dependencies import get_document_dao, get_document_chunk_dao, get_topic_dao
 from database import get_db
 from models import Document, Topic, User
 from schemas import DocumentCreate, DocumentDetail, DocumentFromUrl, DocumentOut, DocumentUpdate
@@ -15,6 +15,14 @@ from services.pdf_service import PDFService
 from services.web_scraper_service import WebScraperService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+async def _create_chunks(db, document_id, text, llm_service, chunk_dao):
+    chunks_data = await llm_service.generate_chunks_with_embeddings(text)
+    for chunk in chunks_data:
+        chunk["document_id"] = document_id
+    if chunks_data:
+        await chunk_dao.bulk_create(db, chunks_data)
 
 
 @router.get("/topic/{topic_id}", response_model=List[DocumentOut])
@@ -47,14 +55,13 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     topic_dao = Depends(get_topic_dao),
     document_dao = Depends(get_document_dao),
+    chunk_dao = Depends(get_document_chunk_dao),
     admin: User = Depends(require_admin),
 ):
-    # Verify topic exists
     topic = await topic_dao.get(db, topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Тема не найдена")
 
-    # Validate PDF and extract text
     if pdf_file.content_type not in ("application/pdf", "application/x-pdf"):
         raise HTTPException(status_code=400, detail="Файл должен быть PDF")
 
@@ -63,19 +70,17 @@ async def upload_document(
     if not pdf_text:
         raise HTTPException(status_code=400, detail="Не удалось извлечь текст из PDF")
 
-    # Generate embedding
-    llm_service = LLMService()
-    embedding = await llm_service.generate_embedding(pdf_text)
-
-    # Create document
-    doc_data = {
+    doc = await document_dao.create(db, {
         "topic_id": topic_id,
         "title": title,
         "description": description,
         "pdf_text": pdf_text,
-        "embedding": embedding,
-    }
-    doc = await document_dao.create(db, doc_data)
+    })
+
+    llm_service = LLMService()
+    await _create_chunks(db, doc.id, pdf_text, llm_service, chunk_dao)
+    await db.commit()
+    await db.refresh(doc)
     return doc
 
 
@@ -85,26 +90,26 @@ async def create_document(
     db: AsyncSession = Depends(get_db),
     document_dao = Depends(get_document_dao),
     topic_dao = Depends(get_topic_dao),
+    chunk_dao = Depends(get_document_chunk_dao),
     admin: User = Depends(require_admin),
 ):
-    """Create document with raw text (for scraper compatibility)."""
     topic = await topic_dao.get(db, data.topic_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Тема не найдена")
 
-    embedding = None
-    if data.pdf_text:
-        llm_service = LLMService()
-        embedding = await llm_service.generate_embedding(data.pdf_text)
-
-    doc_data = {
+    doc = await document_dao.create(db, {
         "topic_id": data.topic_id,
         "title": data.title,
         "description": data.description,
         "pdf_text": data.pdf_text,
-        "embedding": embedding,
-    }
-    doc = await document_dao.create(db, doc_data)
+    })
+
+    if data.pdf_text:
+        llm_service = LLMService()
+        await _create_chunks(db, doc.id, data.pdf_text, llm_service, chunk_dao)
+
+    await db.commit()
+    await db.refresh(doc)
     return doc
 
 
@@ -115,6 +120,7 @@ async def create_document_from_url(
     db: AsyncSession = Depends(get_db),
     topic_dao = Depends(get_topic_dao),
     document_dao = Depends(get_document_dao),
+    chunk_dao = Depends(get_document_chunk_dao),
     admin: User = Depends(require_admin),
 ):
     topic = await topic_dao.get(db, topic_id)
@@ -132,20 +138,17 @@ async def create_document_from_url(
     if not page_text:
         raise HTTPException(status_code=422, detail="Не удалось извлечь полезный текст из страницы")
 
-    title = data.title or page_title
-    description = data.description or data.url
+    doc = await document_dao.create(db, {
+        "topic_id": topic_id,
+        "title": data.title or page_title,
+        "description": data.description or data.url,
+        "pdf_text": page_text,
+    })
 
     llm_service = LLMService()
-    embedding = await llm_service.generate_embedding(page_text)
-
-    doc_data = {
-        "topic_id": topic_id,
-        "title": title,
-        "description": description,
-        "pdf_text": page_text,
-        "embedding": embedding,
-    }
-    doc = await document_dao.create(db, doc_data)
+    await _create_chunks(db, doc.id, page_text, llm_service, chunk_dao)
+    await db.commit()
+    await db.refresh(doc)
     return doc
 
 
