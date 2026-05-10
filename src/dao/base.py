@@ -17,7 +17,7 @@ class BaseDAO:
         """Create new instance."""
         instance = self.model(id=uuid.uuid4(), **obj_data)
         db.add(instance)
-        await db.flush()
+        await db.commit()
         await db.refresh(instance)
         return instance
     
