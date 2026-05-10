@@ -16,6 +16,7 @@ client = AsyncOpenAI(
 
 CHUNK_SIZE = 4000   # ~1000 tokens, well within bge-m3's 8192 limit
 CHUNK_OVERLAP = 400
+RELEVANCE_DISTANCE_THRESHOLD = 0.7  # cosine distance; chunks farther than this are treated as irrelevant
 
 
 @dataclass
@@ -77,11 +78,16 @@ class LLMService:
                 FROM document_chunks c
                 JOIN documents d ON c.document_id = d.id
                 WHERE c.embedding IS NOT NULL
+                  AND c.embedding <=> :embedding < :threshold
                 ORDER BY c.embedding <=> :embedding
                 LIMIT :limit
                 """
             ),
-            {"embedding": str(query_embedding), "limit": limit},
+            {
+                "embedding": str(query_embedding),
+                "limit": limit,
+                "threshold": RELEVANCE_DISTANCE_THRESHOLD,
+            },
         )
         rows = result.mappings().all()
 
